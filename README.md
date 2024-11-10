@@ -4,7 +4,7 @@ Este proyecto permite la gestión de asistencia mediante reconocimiento facial. 
 
 ## Instrucciones de inicio
 
-Para iniciar el proyecto, ejecuta los siguientes comandos:
+Para iniciar el proyecto, ejecuta los siguientes comandos, en el orden que se esoecifica a continuacion:
 
 ```bash
 # Iniciar el Backend
@@ -16,3 +16,9 @@ python app.py
 cd frontend
 cd asistencia
 npm run dev
+```
+## Dependencias 
+Si no se inicializa el proyecto, instalar esta dependencia si es necesario
+```bash
+npm install lucide-react
+
