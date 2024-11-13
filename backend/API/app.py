@@ -15,9 +15,9 @@ app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173", "methods": ["GET", "POST", "OPTIONS"], "allow_headers": ["Content-Type"]}})
 
 # Configuración de rutas y modelos
-dataRuta = 'C:/Users/aaron/Downloads/asistenciaML-main/backend/reconocimientofacial1/Data'
+dataRuta = 'C:/Users/aaron/Downloads/Machine/asistenciaML/backend/reconocimientofacial1/Data'
 modelo_path = 'EntrenamientoEigenFaceRecognizer.xml'
-haarcascade_path = r'C:\Users\aaron\Downloads\asistenciaML-main\backend\entrenamientos opencv ruidos\opencv-master\data\haarcascades\haarcascade_frontalface_default.xml'
+haarcascade_path = r'C:\Users\aaron\Downloads\Machine\asistenciaML\backend\entrenamientos opencv ruidos\opencv-master\data\haarcascades\haarcascade_frontalface_default.xml'
 
 # Función para iniciar la cámara
 def iniciar_camara():
@@ -187,7 +187,7 @@ def agregar():
         if not camara.isOpened():
             raise Exception("No se pudo abrir la cámara")
 
-        ruidos = cv.CascadeClassifier(r'C:\Users\aaron\Downloads\asistenciaML-main\backend\entrenamientos opencv ruidos\opencv-master\data\haarcascades\haarcascade_frontalface_default.xml')
+        ruidos = cv.CascadeClassifier(r'C:\Users\aaron\Downloads\Machine\asistenciaML\backend\entrenamientos opencv ruidos\opencv-master\data\haarcascades\haarcascade_frontalface_default.xml')
         if ruidos.empty():
             raise Exception("Error al cargar el clasificador de cascada Haar.")
 
