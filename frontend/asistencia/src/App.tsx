@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Calendar } from '@/components/ui/calendar'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { BarChart, Users, BookOpen, Brain, Cog, Eye, UserPlus } from 'lucide-react'
+import { BarChart, Users, Brain, Eye, UserPlus } from 'lucide-react'
 import EstudiantesPage from './estudiantes-page.tsx'
 import {
   Dialog,
@@ -16,40 +16,49 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
+// Define el tipo de estudiante
+interface Estudiante {
+  id: string;
+  nombre: string;
+  apellido: string;
+  curso: string;
+  asistencia: number;
+  ultimaAsistencia: Date | null;
+}
+
 export default function ProfesorDashboard() {
   const [date, setDate] = useState<Date | undefined>(new Date())
   const [currentPage, setCurrentPage] = useState('dashboard')
-  const [cameraEnabled, setCameraEnabled] = useState(false)
-  const [videoStream, setVideoStream] = useState<MediaStream | null>(null)
+  const [nombre, setNombre] = useState('')
+  const [apellido, setApellido] = useState('')
 
-  // Función para iniciar la cámara
-  const enableCamera = async () => {
+  const [estudiantes, setEstudiantes] = useState<Estudiante[]>([]);
+
+  // Función para cargar estudiantes desde las carpetas
+  const cargarEstudiantesDesdeCarpetas = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true })
-      setVideoStream(stream)
-      setCameraEnabled(true)
+      const response = await fetch('http://localhost:5000/api/cargar_estudiantes', {
+        method: 'GET'
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setEstudiantes(data.estudiantes.map((est: Estudiante) => ({
+          ...est,
+          ultimaAsistencia: est.ultimaAsistencia ? new Date(est.ultimaAsistencia) : null
+        })));
+      } else {
+        console.error("Error al cargar estudiantes:", data.error);
+      }
     } catch (error) {
-      console.error("Error al acceder a la cámara:", error)
+      console.error("Error al cargar estudiantes:", error);
     }
-  }
+  };
 
-  // Función para detener la cámara
-  const disableCamera = () => {
-    if (videoStream) {
-      videoStream.getTracks().forEach(track => track.stop())
-    }
-    setCameraEnabled(false)
-  }
-
-  // Función para captura de rostros
-  const handleCapture = async () => {
-    try {
-      await fetch('http://localhost:5000/api/captura_rostro', { method: 'POST' })
-      alert("Captura de rostros completada")
-    } catch (error) {
-      console.error("Error en captura de rostro:", error)
-    }
-  }
+  // Cargar estudiantes cuando se monta el componente
+  useEffect(() => {
+    console.log("Estado de estudiantes actualizado:", estudiantes);
+  }, [estudiantes]);
+  
 
   // Función para entrenar el modelo
   const handleTrain = async () => {
@@ -60,39 +69,72 @@ export default function ProfesorDashboard() {
       console.error("Error en entrenamiento:", error)
     }
   }
-
-  // Función para reconocimiento de rostro
   const handleRecognition = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/reconocer', { method: 'POST' })
-      const result = await response.json()
-      alert(`Resultado del reconocimiento: ${result.resultado}`)
+      const response = await fetch('http://localhost:5000/api/reconocer', { method: 'POST' });
+      const result = await response.json();
+  
+      if (response.ok) {
+        alert(`Estudiante reconocido: ${result.resultado}`);
+        
+        console.log("ID estudiante reconocido:", result.id_estudiante);
+        
+        if (result.id_estudiante !== null) {
+          // Actualiza asistencia y última fecha de asistencia
+          actualizarAsistencia(result.id_estudiante);
+        } else {
+          console.error("Error: ID del estudiante no encontrado en el resultado de reconocimiento.");
+        }
+      } else {
+        alert(`Error en reconocimiento: ${result.error}`);
+      }
     } catch (error) {
-      console.error("Error en reconocimiento de rostro:", error)
+      console.error("Error en reconocimiento de rostro:", error);
+      alert("Ocurrió un error en el proceso de reconocimiento.");
+    }
+  };
+  
+  // En la función actualizarAsistencia del frontend
+  const actualizarAsistencia = (id_estudiante: string) => {
+    setEstudiantes(prevEstudiantes =>
+      prevEstudiantes.map(est =>
+        est.id === id_estudiante ? { ...est, asistencia: 100, ultimaAsistencia: date || null } : est
+      )
+    );
+  };
+
+
+  async function handleAddStudent() {
+    try {
+      const response = await fetch('http://localhost:5000/api/agregar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombre_estudiante: nombre, apellido_estudiante: apellido })
+      });
+  
+      // Intenta parsear la respuesta como JSON
+      const data = await response.json();
+  
+      if (response.ok) {
+        // Muestra un mensaje de éxito al usuario
+        alert("Captura de rostros completada");
+  
+        // Opcional: Limpia los campos de nombre y apellido si es necesario
+        setNombre(''); 
+        setApellido('');
+  
+        // Opcional: Actualiza el estado de estudiantes o recarga la lista de estudiantes
+        cargarEstudiantesDesdeCarpetas(); // Asegúrate de tener esta función definida en tu componente para recargar la lista
+      } else {
+        // Muestra un mensaje de error si la respuesta no es exitosa
+        alert(`Error: ${data.error}`);
+      }
+    } catch (error) {
+      // Maneja cualquier error de red o problemas de conexión
+      console.error("Error al iniciar captura de rostros:", error);
+      alert("Ocurrió un error al intentar capturar el rostro.");
     }
   }
-
-  //Funcion para agregar estudiantes
-  async function handleAddStudent(nombre: string): Promise<void> {
-    try {
-        const response = await fetch('http://localhost:5000/api/agregar', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nombre_estudiante: nombre })
-        });
-        
-        const data = await response.json();
-        if (response.ok) {
-            alert("Captura de rostros completada");
-        } else {
-            alert(`Error: ${data.error}`);
-        }
-    } catch (error) {
-        console.error("Error al iniciar captura de rostros:", error);
-        alert("Ocurrió un error al intentar capturar el rostro.");
-    }
-}
-
   return (
     <div className="flex h-screen bg-gray-100">
       {/* Barra lateral */}
@@ -119,12 +161,7 @@ export default function ProfesorDashboard() {
                 <span>Estudiantes</span>
               </a>
             </li>
-            <li>
-              <a href="#" className="flex items-center space-x-2 hover:text-[#f8c200] transition-colors">
-                <BookOpen className="h-5 w-5" />
-                <span>Cursos</span>
-              </a>
-            </li>
+            {/* Puedes agregar más opciones de menú aquí */}
           </ul>
         </nav>
       </aside>
@@ -163,78 +200,59 @@ export default function ProfesorDashboard() {
               </Card>
             </div>
           
-            {/* Contenedor de Estudiantes */}
-            {currentPage === 'dashboard' && (
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button onClick={() => handleAddStudent('Nombre del Estudiante')} className="p-5 m-4 bg-[#291471] 
-              text-xl hover:bg-[#2c9d44] hover:text-[#ffffff] transition-colors">
-                <UserPlus className="mr-2 h-4 w-4" />Agregar Estudiante
+            {/* Botones de IA y Agregar Estudiante */}
+            <div className="mb-6 flex flex-wrap gap-4">
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button className="bg-[#291471] text-xl hover:bg-[#f8c200] hover:text-[#291471] transition-colors">
+                    <UserPlus className="mr-2 h-4 w-4" />Agregar Estudiante
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[425px]">
+                  <DialogHeader>
+                    <DialogTitle>Agregar Nuevo Estudiante</DialogTitle>
+                    <DialogDescription>
+                      Ingrese los datos del nuevo estudiante aquí. Haga clic en guardar cuando termine.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <Label htmlFor="nombre" className="text-right">Nombre</Label>
+                      <Input 
+                        id="nombre" 
+                        className="col-span-3" 
+                        value={nombre}
+                        onChange={(e) => setNombre(e.target.value)}
+                      />
+                    </div>
+                    <div className="grid grid-cols-4 items-center gap-4">
+                      <Label htmlFor="apellido" className="text-right">Apellido</Label>
+                      <Input 
+                        id="apellido" 
+                        className="col-span-3" 
+                        value={apellido}
+                        onChange={(e) => setApellido(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button type="button" onClick={handleAddStudent} className="bg-[#291471] hover:bg-[#f8c200] hover:text-[#291471] transition-colors">
+                      Guardar
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              <Button onClick={handleTrain} className="bg-[#291471] hover:bg-[#f8c200] hover:text-[#291471] transition-colors">
+                <Brain className="mr-2 h-4 w-4" /> Entrenamiento
               </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
-              <DialogHeader>
-                <DialogTitle>Agregar Nuevo Estudiante</DialogTitle>
-                <DialogDescription>
-                  Ingrese los datos del nuevo estudiante aquí. Haga clic en guardar cuando termine.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="nombre" className="text-right">
-                    Nombre
-                  </Label>
-                  <Input id="nombre" className="col-span-3" />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="apellido" className="text-right">
-                    Apellido
-                  </Label>
-                  <Input id="apellido" className="col-span-3" />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button type="submit" className="bg-[#291471] hover:bg-[#f8c200] hover:text-[#291471] transition-colors">Guardar</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        )}
-            {/* Contenedor de IA */}
-            <Card className="mb-6">
-              <CardHeader>
-                <CardTitle>Inteligencia Artificial</CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-wrap gap-4">
-                <Button onClick={handleTrain} className="bg-[#291471] hover:bg-[#f8c200] hover:text-[#291471] transition-colors">
-                  <Brain className="mr-2 h-4 w-4" /> Entrenamiento
-                </Button>
-                <Button onClick={handleCapture} className="bg-[#291471] hover:bg-[#f8c200] hover:text-[#291471] transition-colors">
-                  <Cog className="mr-2 h-4 w-4" /> Procesamiento
-                </Button>
-                <Button onClick={handleRecognition} className="bg-[#291471] hover:bg-[#f8c200] hover:text-[#291471] transition-colors">
-                  <Eye className="mr-2 h-4 w-4" /> Reconocimiento
-                </Button>
-                <Button onClick={cameraEnabled ? disableCamera : enableCamera} className="bg-[#291471] hover:bg-[#f8c200] hover:text-[#291471] transition-colors">
-                  {cameraEnabled ? 'Desactivar' : 'Activar'} Cámara
-                </Button>
-              </CardContent>
-              {cameraEnabled && (
-                <div className="mt-4">
-                  <video
-                    autoPlay
-                    ref={video => {
-                      if (video && videoStream) {
-                        video.srcObject = videoStream
-                      }
-                    }}
-                    className="w-full h-auto"
-                  />
-                </div>
-              )}
-            </Card>
+              <Button onClick={handleRecognition} className="bg-[#291471] hover:bg-[#f8c200] hover:text-[#291471] transition-colors">
+                <Eye className="mr-2 h-4 w-4" /> Reconocimiento
+              </Button>
+            </div>
           </>
         ) : (
-          <EstudiantesPage />
+          <EstudiantesPage estudiantes={estudiantes} />
         )}
       </main>
     </div>
