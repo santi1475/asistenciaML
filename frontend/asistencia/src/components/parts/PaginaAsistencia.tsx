@@ -1,5 +1,5 @@
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 
 interface Estudiante {
   id: string;
@@ -16,13 +16,14 @@ type EstadoAsistencia = "Presente" | "Tardanza" | "No asistió";
 
 interface AsistenciaDashboardProps {
   estudiantes: Estudiante[];
-  actualizarAsistencia: (id_estudiante: string) => void;
-  handleRecognition: () => void;
+  actualizarAsistencia: (id_estudiante: string, nuevoEstado: EstadoAsistencia, horaEntrada: string | null) => void;
+  handleRecognitionAsistencia: () => Promise<{ id: string; estado: EstadoAsistencia; horaEntrada: string | null } | null>;
 }
 
 const AsistenciaDashboard: React.FC<AsistenciaDashboardProps> = ({
   estudiantes,
-  handleRecognition,
+  actualizarAsistencia,
+  handleRecognitionAsistencia,
 }) => {
   const getBadgeColor = (estado: EstadoAsistencia) => {
     switch (estado) {
@@ -34,6 +35,22 @@ const AsistenciaDashboard: React.FC<AsistenciaDashboardProps> = ({
         return "bg-red-500";
       default:
         return "bg-gray-500";
+    }
+  };
+
+  const handleRecognition = async () => {
+    try {
+      const result = await handleRecognitionAsistencia();
+      if (result) {
+        const { id, estado, horaEntrada } = result;
+        actualizarAsistencia(id, estado, horaEntrada);
+        alert(`Asistencia actualizada: Estado ${estado}, Hora de entrada: ${horaEntrada || "No registrada"}`);
+      } else {
+        alert("No se pudo reconocer la asistencia.");
+      }
+    } catch (error) {
+      console.error("Error al reconocer la asistencia:", error);
+      alert("Ocurrió un error al intentar reconocer la asistencia.");
     }
   };
 
@@ -52,17 +69,19 @@ const AsistenciaDashboard: React.FC<AsistenciaDashboardProps> = ({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Nombre del Estudiante</TableHead>
-              <TableHead>Hora de Entrada</TableHead>
-              <TableHead>Estado</TableHead>
+              <TableHead className="text-center">Nombre</TableHead>
+              <TableHead className="text-center">Apellido</TableHead>
+              <TableHead className="text-center">Hora de Entrada</TableHead>
+              <TableHead className="text-center">Estado</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {estudiantes.map((estudiante) => (
               <TableRow key={estudiante.id}>
-                <TableCell>{estudiante.nombre}</TableCell>
-                <TableCell>{estudiante.horaEntrada || "-"}</TableCell>
-                <TableCell>
+                <TableCell className="text-center">{estudiante.nombre}</TableCell>
+                <TableCell className="text-center">{estudiante.apellido}</TableCell>
+                <TableCell className="text-center">{estudiante.horaEntrada || "-"}</TableCell>
+                <TableCell className="text-center">
                   <Badge className={getBadgeColor(estudiante.estado as EstadoAsistencia)}>
                     {estudiante.estado}
                   </Badge>

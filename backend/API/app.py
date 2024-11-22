@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import cv2 as cv
 import base64
+import time
 import os
 import numpy as np
 import imutils
@@ -240,6 +241,126 @@ def agregar():
     except Exception as e:
         print("Error en captura de rostro:", e)
         return jsonify({"error": str(e)}), 500
+
+# Cargar datos de estudiantes desde nombres_estudiantes.json
+with open('nombres_estudiantes.json', 'r') as file:
+    estudiantes = json.load(file)
+
+def calcular_estado_horario(hora_actual):
+    if hora_actual < datetime.strptime("07:00", "%H:%M"):
+        return "Presente"
+    elif hora_actual < datetime.strptime("07:30", "%H:%M"):
+        return "Tardanza"
+    else:
+        return "No asistió"
+
+@app.route('/api/reconocer_estudiante', methods=['POST'])
+def reconocer_estudiante():
+
+    try:
+        # Verifica si el modelo existe
+        if not os.path.exists(modelo_path):
+            return jsonify({
+                "mensaje": "El archivo del modelo no existe o fue eliminado. Por favor, realice el entrenamiento nuevamente.",
+                "asistencia": None
+            }), 400
+
+        # Carga el modelo entrenado y el diccionario de nombres
+        entrenamiento_eigen = cv.face.EigenFaceRecognizer_create()
+        entrenamiento_eigen.read(modelo_path)
+
+        try:
+            with open("nombres_estudiantes.json", "r") as f:
+                nombres_estudiantes = json.load(f)
+        except FileNotFoundError:
+            return jsonify({
+                "mensaje": "El archivo de nombres no existe. Entrene el modelo primero.",
+                "asistencia": None
+            }), 500
+
+        # Configuración de la cámara
+        camara = cv.VideoCapture(0)
+        if not camara.isOpened():
+            return jsonify({
+                "mensaje": "No se pudo abrir la cámara.",
+                "asistencia": None
+            }), 500
+
+        face_cascade = cv.CascadeClassifier(haarcascade_path)
+        tiempo_inicio = time.time()
+        identificado = False
+        id_estudiante = None
+        nombre_estudiante = "Desconocido"
+
+        while time.time() - tiempo_inicio < 10:  # Captura por 10 segundos
+            ret, frame = camara.read()
+            if not ret:
+                continue
+
+            # Procesa el fotograma
+            gris = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+            rostros = face_cascade.detectMultiScale(gris, scaleFactor=1.3, minNeighbors=5)
+
+            for (x, y, w, h) in rostros:
+                rostro = gris[y:y + h, x:x + w]
+                rostro_resized = cv.resize(rostro, (160, 160), interpolation=cv.INTER_CUBIC)
+
+                # Predicción
+                id_predicho, distancia = entrenamiento_eigen.predict(rostro_resized)
+
+                if distancia < 8000:  # Ajustar el umbral según el modelo
+                    id_estudiante = str(id_predicho)
+                    nombre_estudiante = nombres_estudiantes.get(id_estudiante, "Desconocido")
+                    identificado = True
+                    break
+
+            if identificado:
+                break
+
+        camara.release()
+        cv.destroyAllWindows()
+
+        if identificado:
+            # Registra la asistencia del estudiante identificado
+            hora_actual = datetime.now()
+
+            if hora_actual.hour == 7 and hora_actual.minute <= 5:
+                estado = "Presente"
+            elif hora_actual.hour == 7 and 6 <= hora_actual.minute <= 10:
+                estado = "Tardanza"
+            elif hora_actual.hour == 8 and hora_actual.minute == 0:
+                estado = "No asistió"
+            else:
+                estado = "No asistió"
+
+            registro_asistencia = {
+                "id": id_estudiante,
+                "nombre": nombre_estudiante,
+                "hora": hora_actual.strftime("%H:%M:%S"),
+                "estado": estado
+            }
+
+            # Guardar asistencia en archivo JSON
+            os.makedirs("asistencias", exist_ok=True)
+            with open(f"asistencias/asistencia_{id_estudiante}.json", "w") as f:
+                json.dump(registro_asistencia, f, indent=4)
+
+            return jsonify({
+                "mensaje": "Estudiante identificado",
+                "asistencia": registro_asistencia
+            }), 200
+        else:
+            return jsonify({
+                "mensaje": "No se pudo identificar al estudiante",
+                "asistencia": None
+            }), 404
+
+    except Exception as e:
+        return jsonify({
+            "mensaje": f"Error inesperado: {str(e)}",
+            "asistencia": None
+        }), 500
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
