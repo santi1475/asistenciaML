@@ -12,7 +12,12 @@ haarcascade_path = r'D:\SGV\9 ciclo\Machine\V1\backend\entrenamientos opencv rui
 #Otro
 ruidos = cv.CascadeClassifier(r'D:\SGV\9 ciclo\Machine\V1\backend\entrenamientos opencv ruidos\opencv-master\data\haarcascades\haarcascade_frontalface_default.xml')
 ```
-
+Ahora este proyecto si o si requerira ciertos archivos llenos:
+```bash
+EntrenamientoEigenFaceRecognizer.xml
+Fotos de 1 estudiante
+```
+Esto es por la falta aun de conexion con una BD, ademas de que se hace para la estabilidad del flujo del backend
 
 ## Instrucciones de inicio
 
