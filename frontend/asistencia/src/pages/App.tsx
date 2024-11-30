@@ -142,6 +142,31 @@ export default function App() {
       setIsLoading(false);
     }
   };
+  
+  // Función para reconocer a un estudiante y actualizar su asistencia
+  const handleRecognitionAndUpdate = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/reconocer', { method: 'POST' });
+      const result = await response.json();
+  
+      if (response.ok) {
+        alert(`Estudiante reconocido: ${result.resultado}`);
+        
+        console.log("ID estudiante reconocido:", result.id_estudiante);
+        
+        if (result.id_estudiante !== null) {
+          console.log("Actualizando asistencia...");
+        } else {
+          console.error("Error: ID del estudiante no encontrado en el resultado de reconocimiento.");
+        }
+      } else {
+        alert(`Error en reconocimiento: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Error en reconocimiento de rostro:", error);
+      alert("Ocurrió un error en el proceso de reconocimiento.");
+    }
+  };
 
   return (
     <div className="flex h-screen bg-gray-100">
@@ -158,10 +183,10 @@ export default function App() {
             setApellido={setApellido}
             handleAddStudent={handleAddStudent}
             handleTrain={entrenarIA}
-            handleRecognition={reconocerEstudiante}
+            handleRecognition={handleRecognitionAndUpdate}
           />
         )}
-        {!isLoading && currentPage === 'estudiantes' && <EstudiantesPage estudiantes={estudiantes} />}
+        {!isLoading && currentPage === 'estudiantes' && <EstudiantesPage />}
         {!isLoading && currentPage === 'asistencia' && (
           <AsistenciaDashboard
             estudiantes={estudiantes}

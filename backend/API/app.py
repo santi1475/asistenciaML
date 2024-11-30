@@ -18,6 +18,7 @@ CORS(app, resources={r"/api/*": {"origins": "http://localhost:5173", "methods": 
 dataRuta = 'D:/SGV/9 ciclo/Machine/V1/backend/reconocimientofacial1/Data'
 modelo_path = 'EntrenamientoEigenFaceRecognizer.xml'
 haarcascade_path = r'D:\SGV\9 ciclo\Machine\V1\backend\entrenamientos opencv ruidos\opencv-master\data\haarcascades\haarcascade_frontalface_default.xml'
+asistencia_path = 'D:/SGV/9 ciclo/Machine/V1/backend/API/asistencias/asistencia.json'
 
 # Función para iniciar la cámara
 def iniciar_camara():
@@ -26,6 +27,7 @@ def iniciar_camara():
         raise Exception("No se pudo acceder a la cámara")
     return camara
 
+# Endpoint para entrenar el modelo de entrenamiento 
 @app.route('/api/entrenar', methods=['POST'])
 def entrenar_modelo():
     lista_data = os.listdir(dataRuta)
@@ -70,7 +72,7 @@ def entrenar_modelo():
 
     return jsonify({"message": "Entrenamiento completado"})
 
-# Endpoint para entrenar el modelo (capa de entrenamiento)
+# Endpoint para reconocer quien es quien
 @app.route('/api/reconocer', methods=['POST'])
 def reconocer_rostro():
     if not os.path.exists(modelo_path):
@@ -154,6 +156,7 @@ def cargar_estudiantes():
         })
     return jsonify({"estudiantes": estudiantes})
 
+# Endpoint para agregar un nuevo estudiante
 @app.route('/api/agregar', methods=['POST'])
 def agregar():
     data = request.get_json()
@@ -242,6 +245,7 @@ def agregar():
         print("Error en captura de rostro:", e)
         return jsonify({"error": str(e)}), 500
 
+
 # Cargar datos de estudiantes desde nombres_estudiantes.json
 with open('nombres_estudiantes.json', 'r') as file:
     estudiantes = json.load(file)
@@ -254,9 +258,9 @@ def calcular_estado_horario(hora_actual):
     else:
         return "No asistió"
 
+#Endpoint para la asistencia de los estudiantes
 @app.route('/api/reconocer_estudiante', methods=['POST'])
 def reconocer_estudiante():
-
     try:
         # Verifica si el modelo existe
         if not os.path.exists(modelo_path):
@@ -286,6 +290,11 @@ def reconocer_estudiante():
                 "asistencia": None
             }), 500
 
+        try:
+            camara = iniciar_camara()
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
         face_cascade = cv.CascadeClassifier(haarcascade_path)
         tiempo_inicio = time.time()
         identificado = False
@@ -296,7 +305,6 @@ def reconocer_estudiante():
             ret, frame = camara.read()
             if not ret:
                 continue
-
             # Procesa el fotograma
             gris = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
             rostros = face_cascade.detectMultiScale(gris, scaleFactor=1.3, minNeighbors=5)
@@ -323,27 +331,42 @@ def reconocer_estudiante():
         if identificado:
             # Registra la asistencia del estudiante identificado
             hora_actual = datetime.now()
-
-            if hora_actual.hour == 7 and hora_actual.minute <= 5:
-                estado = "Presente"
-            elif hora_actual.hour == 7 and 6 <= hora_actual.minute <= 10:
-                estado = "Tardanza"
-            elif hora_actual.hour == 8 and hora_actual.minute == 0:
-                estado = "No asistió"
-            else:
-                estado = "No asistió"
+            estado = calcular_estado_horario(hora_actual)
 
             registro_asistencia = {
                 "id": id_estudiante,
                 "nombre": nombre_estudiante,
                 "hora": hora_actual.strftime("%H:%M:%S"),
+                "fecha": hora_actual.strftime("%d/%m/%Y"),
                 "estado": estado
             }
 
-            # Guardar asistencia en archivo JSON
+            # Actualizar o crear el archivo asistencia.json
+            archivo_asistencia = "asistencias/asistencia.json"
             os.makedirs("asistencias", exist_ok=True)
-            with open(f"asistencias/asistencia_{id_estudiante}.json", "w") as f:
-                json.dump(registro_asistencia, f, indent=4)
+            try:
+                with open(archivo_asistencia, "r") as f:
+                    asistencias = json.load(f)
+
+                    # Validar que asistencias sea una lista
+                    if not isinstance(asistencias, list):
+                        asistencias = []
+            except (FileNotFoundError, json.JSONDecodeError):
+                asistencias = []
+
+            # Verificar si el estudiante ya tiene un registro
+            actualizado = False
+            for registro in asistencias:
+                if isinstance(registro, dict) and registro.get("id") == id_estudiante and registro.get("fecha") == registro_asistencia["fecha"]:
+                    registro.update(registro_asistencia)
+                    actualizado = True
+                    break
+
+            if not actualizado:
+                asistencias.append(registro_asistencia)
+
+            with open(archivo_asistencia, "w") as f:
+                json.dump(asistencias, f, indent=4)
 
             return jsonify({
                 "mensaje": "Estudiante identificado",
@@ -360,6 +383,136 @@ def reconocer_estudiante():
             "mensaje": f"Error inesperado: {str(e)}",
             "asistencia": None
         }), 500
+
+
+#Funciones para los datos estadisticos    
+def calcular_estadisticas():
+    if not os.path.exists(asistencia_path):
+        return {
+            "error": "Archivo de asistencias no encontrado.",
+            "presente": 0,
+            "tardanza": 0,
+            "falta": 100
+        }
+
+    try:
+        with open(asistencia_path, "r", encoding="utf-8") as file:
+            data = json.load(file)
+
+            # Validar que el archivo contiene una lista
+            if not isinstance(data, list):
+                return {
+                "error": "El archivo JSON no contiene una lista válida.",
+                    "presente": 0,
+                    "tardanza": 0,
+                    "falta": 100
+                }
+
+            # Inicializar contadores
+            total_registros = len(data)
+            estadisticas = {"Presente": 0, "Tardanza": 0, "No asistió": 0}
+
+            # Contar las ocurrencias de cada estado
+            for registro in data:
+                estado = registro.get("estado", "")
+                if estado in estadisticas:
+                    estadisticas[estado] += 1
+
+            # Calcular porcentajes
+            presente_pct = (estadisticas[" "] / total_registros) * 100 if total_registros > 0 else 0
+            tardanza_pct = (estadisticas["Tardanza"] / total_registros) * 100 if total_registros > 0 else 0
+            falta_pct = (estadisticas["No asistió"] / total_registros) * 100 if total_registros > 0 else 0
+
+            return {
+                "presente": round(presente_pct, 2),
+                "tardanza": round(tardanza_pct, 2),
+                "falta": round(falta_pct, 2)
+            }
+
+    except json.JSONDecodeError:
+        return {
+            "error": "Error al leer o parsear el archivo JSON.",
+            "presente": 0,
+            "tardanza": 0,
+            "falta": 100
+        }
+    except Exception as e:
+        return {
+            "error": f"Error inesperado: {str(e)}",
+            "presente": 0,
+            "tardanza": 0,
+            "falta": 100
+        }
+
+#Endpoint para mandar las estadisticas
+@app.route("/api/estadisticas", methods=["GET"])
+def obtener_estadisticas():
+    """
+    Endpoint para obtener estadísticas de asistencia.
+    """
+    estadisticas = calcular_estadisticas()
+    return jsonify(estadisticas)
+
+@app.route("/api/estudiantes", methods=['GET'])
+def obtener_estudiantes():
+    try:
+        # Leer el archivo JSON con los registros de asistencia
+        with open(asistencia_path, 'r', encoding='utf-8') as f:
+            asistencias = json.load(f)
+
+        # Asegurarse de que `asistencias` sea una lista, incluso si es un solo registro
+        if isinstance(asistencias, dict):
+            asistencias = [asistencias]  # Convertir un único objeto en una lista
+
+        if not isinstance(asistencias, list):
+            raise ValueError("El archivo JSON debe contener una lista o un único objeto de asistencias.")
+
+        # Agrupar los registros por estudiante
+        estudiantes = {}
+
+        for registro in asistencias:
+            # Validar que todos los campos necesarios estén presentes
+            if not all(key in registro for key in ['nombre', 'fecha', 'hora', 'estado']):
+                raise ValueError("Faltan claves en uno o más registros de asistencia.")
+
+            nombre = registro['nombre']
+            fecha_hora = f"{registro['fecha']} {registro['hora']}"
+            estado = registro['estado']
+
+            # Si el estudiante no existe en el diccionario, inicializarlo
+            if nombre not in estudiantes:
+                estudiantes[nombre] = {
+                    'id': registro.get('id', 'Desconocido'),  # Usar el ID si está disponible
+                    'nombre': nombre,
+                    'ultimo_registro': fecha_hora,
+                    'total_asistencias': 0,
+                    'total_sesiones': 0
+                }
+
+            # Actualizar el último registro
+            estudiantes[nombre]['ultimo_registro'] = fecha_hora
+
+            # Contabilizar la asistencia y el total de sesiones
+            estudiantes[nombre]['total_sesiones'] += 1
+            if estado == "Asistió":
+                estudiantes[nombre]['total_asistencias'] += 1
+
+        # Calcular el porcentaje de asistencia para cada estudiante
+        estudiantes_info = []
+        for estudiante in estudiantes.values():
+            if estudiante['total_sesiones'] > 0:
+                porcentaje_asistencia = (estudiante['total_asistencias'] / estudiante['total_sesiones']) * 100
+            else:
+                porcentaje_asistencia = 0.0  # Si no hay sesiones registradas, el porcentaje es 0
+            estudiante['porcentaje_asistencia'] = round(porcentaje_asistencia, 2)
+            estudiantes_info.append(estudiante)
+
+        return jsonify({"estudiantes": estudiantes_info})
+
+    except ValueError as ve:
+        return jsonify({"error": f"Hubo un error con los datos: {str(ve)}"}), 400
+    except Exception as e:
+        return jsonify({"error": f"Hubo un error al procesar los datos: {str(e)}"}), 500
 
 
 if __name__ == '__main__':
